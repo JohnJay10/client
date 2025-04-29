@@ -208,10 +208,11 @@ const CustomerVerification = () => {
         { rejectionReason: values.reason }
       );
       
-      if (response.data.success) {
+      // More robust success check
+      if (response.status >= 200 && response.status < 300) {
         setSnackbar({
           open: true,
-          message: 'Customer rejected successfully',
+          message: response.data.message || 'Customer rejected successfully',
           severity: 'success'
         });
         
@@ -238,16 +239,18 @@ const CustomerVerification = () => {
         throw new Error(response.data.message || 'Rejection failed');
       }
     } catch (error) {
+      console.error('Rejection error:', error);
       setSnackbar({
         open: true,
-        message: error.response?.data?.message || 'Failed to reject customer',
+        message: error.response?.data?.message || 
+                 error.message || 
+                 'Failed to reject customer',
         severity: 'error'
       });
     } finally {
       setLoading(false);
     }
   };
-
   const updateCustomer = async (values) => {
     try {
       setLoading(true);

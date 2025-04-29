@@ -46,7 +46,7 @@ const TokenManagement = () => {
     totalPages: 1
   });
 
-  // State for tokens history (both requested and issued)
+  // State for tokens history
   const [tokens, setTokens] = useState([]);
   const [tokensLoading, setTokensLoading] = useState(false);
   const [tokensPagination, setTokensPagination] = useState({
@@ -56,19 +56,15 @@ const TokenManagement = () => {
     totalPages: 1
   });
   const [searchTerm, setSearchTerm] = useState('');
-
-  // State for approved but not yet issued requests
-  const [approvedRequests, setApprovedRequests] = useState([]);
-
-  // State for vendor filtering
-  const [vendors, setVendors] = useState([]);
   const [selectedVendor, setSelectedVendor] = useState('');
+  const [vendors, setVendors] = useState([]);
 
-  // State for rejection
+  // Rejection dialog state
   const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
   const [requestToReject, setRequestToReject] = useState(null);
 
+  // Fetch vendors
   const fetchVendors = useCallback(async () => {
     try {
       const response = await API.get('/admin/vendors');
@@ -83,37 +79,20 @@ const TokenManagement = () => {
     }
   }, []);
 
+  // Fetch token requests with pagination
   const fetchTokenRequests = useCallback(async (page = 1) => {
     try {
       setLoading(true);
-      const [requestsResponse, customersResponse] = await Promise.all([
-        API.get(`/tokens/admin/requests?page=${page}&limit=5`),
-        API.get('/admin/customers')
-      ]);
-
-      const allCustomers = customersResponse.data?.data || customersResponse.data || [];
-      let allRequests = requestsResponse.data?.data || requestsResponse.data || [];
-      const totalRequests = requestsResponse.data?.total || 0;
-
-      // Combine with approved but not yet issued requests
-      allRequests = [...allRequests, ...approvedRequests.filter(ar => 
-        !allRequests.some(r => r._id === ar._id)
-      )];
-
-      const requestsWithVerification = allRequests.map(request => {
-        const customer = allCustomers.find(c => c.meterNumber === request.meterNumber);
-        return {
-          ...request,
-          customerVerification: customer?.verification || null
-        };
-      });
-
-      setRequests(requestsWithVerification);
-      setRequestsPagination({
+      const response = await API.get(
+        `/tokens/admin/requests?status=pending,approved&page=${page}&limit=5`
+      );
+      
+      setRequests(response.data?.data || []);
+      setRequestsPagination(response.data?.pagination || {
         page,
         limit: 5,
-        total: totalRequests,
-        totalPages: Math.ceil(totalRequests / 5)
+        total: 0,
+        totalPages: 1
       });
     } catch (error) {
       console.error('Fetch error:', error);
@@ -125,53 +104,27 @@ const TokenManagement = () => {
     } finally {
       setLoading(false);
     }
-  }, [approvedRequests]);
+  }, []);
 
+  // Fetch all tokens with pagination
   const fetchAllTokens = useCallback(async (page = 1, vendorId = '', search = '') => {
     try {
       setTokensLoading(true);
       let url = `/tokens/admin/all-tokens?page=${page}&limit=5`;
       
-      if (vendorId) {
-        url += `&vendorId=${vendorId}`;
-      }
-      
-      if (search) {
-        url += `&meterNumber=${search}`;
-      }
+      if (vendorId) url += `&vendorId=${vendorId}`;
+      if (search) url += `&meterNumber=${search}`;
       
       const response = await API.get(url);
+      const tokensData = response.data?.data || [];
       
-      if (response.data.success) {
-        const tokensData = response.data.data || [];
-        
-        const vendorsResponse = await API.get('/admin/vendors');
-        const allVendors = vendorsResponse.data?.data || vendorsResponse.data || [];
-
-        const tokensWithVendors = tokensData.map(token => {
-          const vendor = allVendors.find(v => 
-            v._id === token.vendorId || 
-            v._id === token.vendorId?._id
-          );
-
-          return {
-            ...token,
-            vendorId: {
-              _id: vendor?._id,
-              username: vendor?.username,
-              name: vendor?.name
-            }
-          };
-        });
-
-        setTokens(tokensWithVendors);
-        setTokensPagination({
-          page,
-          limit: 5,
-          total: response.data.total || 0,
-          totalPages: response.data.totalPages || 1
-        });
-      }
+      setTokens(tokensData);
+      setTokensPagination(response.data?.pagination || {
+        page,
+        limit: 5,
+        total: 0,
+        totalPages: 1
+      });
     } catch (error) {
       console.error('Failed to fetch tokens:', error);
       setSnackbar({
@@ -184,23 +137,20 @@ const TokenManagement = () => {
     }
   }, []);
 
+  // Handle search
   const handleSearch = (term) => {
     setSearchTerm(term);
     fetchAllTokens(1, selectedVendor, term);
   };
 
+  // Handle vendor filter change
   const handleVendorChange = (event) => {
     const vendorId = event.target.value;
     setSelectedVendor(vendorId);
     fetchAllTokens(1, vendorId, searchTerm);
   };
 
-  useEffect(() => {
-    fetchTokenRequests();
-    fetchAllTokens();
-    fetchVendors();
-  }, [fetchTokenRequests, fetchAllTokens, fetchVendors]);
-
+  // Page change handlers
   const handleRequestsPageChange = (event, newPage) => {
     fetchTokenRequests(newPage);
   };
@@ -209,6 +159,7 @@ const TokenManagement = () => {
     fetchAllTokens(newPage, selectedVendor, searchTerm);
   };
 
+  // Token validation
   const validateToken = (value) => {
     if (!value) {
       setTokenError('Token value is required');
@@ -222,18 +173,17 @@ const TokenManagement = () => {
     return true;
   };
 
+  // Approve request
   const handleApproveRequest = async (requestId) => {
     try {
       setActionLoading(true);
       const response = await API.patch(`/tokens/admin/approve/${requestId}`);
 
       if (response.data.success) {
-        const approvedRequest = requests.find(req => req._id === requestId);
-        const updatedRequest = { ...approvedRequest, status: 'approved' };
-        
-        setApprovedRequests(prev => [...prev, updatedRequest]);
-        setRequests(prev => prev.filter(req => req._id !== requestId));
-        
+        setRequests(prev => prev.map(req => 
+          req._id === requestId ? { ...req, status: 'approved' } : req
+        ));
+        setSelectedRequest(requests.find(req => req._id === requestId));
         setSnackbar({
           open: true,
           message: 'Request approved successfully',
@@ -252,6 +202,7 @@ const TokenManagement = () => {
     }
   };
 
+  // Rejection dialog handlers
   const openRejectionDialog = (requestId) => {
     setRequestToReject(requestId);
     setRejectionDialogOpen(true);
@@ -300,6 +251,7 @@ const TokenManagement = () => {
     }
   };
 
+  // Issue token
   const handleIssueToken = async () => {
     if (!validateToken(tokenValue)) return;
     if (!selectedRequest) return;
@@ -314,13 +266,8 @@ const TokenManagement = () => {
       });
 
       if (response.data.success) {
-        // Remove from approved requests
-        setApprovedRequests(prev => prev.filter(req => req._id !== selectedRequest._id));
-        
-        // Refresh both tables
         fetchTokenRequests(requestsPagination.page);
         fetchAllTokens(tokensPagination.page, selectedVendor, searchTerm);
-        
         setSelectedRequest(null);
         setTokenValue('');
         setSnackbar({
@@ -341,6 +288,7 @@ const TokenManagement = () => {
     }
   };
 
+  // Format date
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
@@ -352,6 +300,7 @@ const TokenManagement = () => {
     });
   };
 
+  // Render status badge
   const renderStatusBadge = (status) => {
     const statusColors = {
       pending: 'warning',
@@ -369,6 +318,7 @@ const TokenManagement = () => {
     );
   };
 
+  // Render action buttons
   const renderActionButtons = (request) => {
     switch (request.status) {
       case 'pending':
@@ -396,15 +346,26 @@ const TokenManagement = () => {
         );
       case 'approved':
         return (
-          <Button
-            variant="contained"
-            color="primary"
-            size="small"
-            onClick={() => setSelectedRequest(request)}
-            disabled={actionLoading}
-          >
-            Issue Token
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              variant="contained"
+              color="primary"
+              size="small"
+              onClick={() => setSelectedRequest(request)}
+              disabled={actionLoading}
+            >
+              Issue Token
+            </Button>
+            <Button
+              variant="outlined"
+              color="error"
+              size="small"
+              onClick={() => openRejectionDialog(request._id)}
+              disabled={actionLoading}
+            >
+              Reject
+            </Button>
+          </Box>
         );
       case 'completed':
         return (
@@ -418,6 +379,13 @@ const TokenManagement = () => {
         return null;
     }
   };
+
+  // Initial data fetch
+  useEffect(() => {
+    fetchTokenRequests();
+    fetchAllTokens();
+    fetchVendors();
+  }, [fetchTokenRequests, fetchAllTokens, fetchVendors]);
 
   if (loading && requests.length === 0) {
     return (
@@ -433,6 +401,7 @@ const TokenManagement = () => {
         Token Requests Management
       </Typography>
 
+      {/* Requests Table */}
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
@@ -454,7 +423,7 @@ const TokenManagement = () => {
               requests.map(request => (
                 <TableRow key={request._id}>
                   <TableCell>
-                    <Typography fontWeight="500">{request.vendorId.name}</Typography>
+                    <Typography fontWeight="500">{request.vendorId?.name}</Typography>
                     <Typography variant="body2" color="text.secondary">
                       {request.meterNumber}
                     </Typography>
@@ -483,6 +452,7 @@ const TokenManagement = () => {
         </Table>
       </TableContainer>
 
+      {/* Requests Pagination */}
       {requestsPagination.totalPages > 1 && (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
           <Pagination
@@ -494,10 +464,13 @@ const TokenManagement = () => {
         </Box>
       )}
 
+      {/* Token History Section */}
       <Box sx={{ mt: 4 }}>
         <Typography variant="h6" gutterBottom>
           Token History (Requests & Issued Tokens)
         </Typography>
+        
+        {/* Search and Filter */}
         <Box sx={{ mb: 2, display: 'flex', gap: 2 }}>
           <TextField
             label="Search by Meter Number"
@@ -530,6 +503,7 @@ const TokenManagement = () => {
           </FormControl>
         </Box>
           
+        {/* Tokens Table */}
         <TableContainer component={Paper}>
           <Table>
             <TableHead>
@@ -566,9 +540,7 @@ const TokenManagement = () => {
                     <TableCell>{token.disco}</TableCell>
                     <TableCell>{token.units}</TableCell>
                     <TableCell>₦{token.amount?.toLocaleString() || '0'}</TableCell>
-                    <TableCell>
-                      {renderStatusBadge(token.status)}
-                    </TableCell>
+                    <TableCell>{renderStatusBadge(token.status)}</TableCell>
                     <TableCell>{formatDate(token.createdAt)}</TableCell>
                     <TableCell>
                       {token.status === 'issued' ? formatDate(token.updatedAt) : 'N/A'}
@@ -583,6 +555,7 @@ const TokenManagement = () => {
           </Table>
         </TableContainer>
 
+        {/* Tokens Pagination */}
         {tokensPagination.totalPages > 1 && (
           <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
             <Pagination
@@ -602,7 +575,9 @@ const TokenManagement = () => {
         fullWidth
         maxWidth="sm"
       >
-        <DialogTitle>Issue Token</DialogTitle>
+        <DialogTitle>
+          {selectedRequest?.status === 'approved' ? 'Issue Token' : 'Token Details'}
+        </DialogTitle>
         <DialogContent>
           {selectedRequest && (
             <Box sx={{ mt: 2 }}>
@@ -634,21 +609,35 @@ const TokenManagement = () => {
                 margin="normal"
                 disabled
               />
-              <TextField
-                label="Token Value *"
-                value={tokenValue}
-                onChange={(e) => setTokenValue(e.target.value)}
-                fullWidth
-                margin="normal"
-                error={!!tokenError}
-                helperText={tokenError}
-                placeholder="Enter 16-45 digit token"
-                inputProps={{ maxLength: 45 }}
-              />
+              {selectedRequest.status === 'approved' && (
+                <TextField
+                  label="Token Value *"
+                  value={tokenValue}
+                  onChange={(e) => setTokenValue(e.target.value)}
+                  fullWidth
+                  margin="normal"
+                  error={!!tokenError}
+                  helperText={tokenError}
+                  placeholder="Enter 16-45 digit token"
+                  inputProps={{ maxLength: 45 }}
+                />
+              )}
             </Box>
           )}
         </DialogContent>
         <DialogActions>
+          {selectedRequest?.status === 'approved' && (
+            <Button 
+              color="error"
+              onClick={() => {
+                openRejectionDialog(selectedRequest._id);
+                setSelectedRequest(null);
+              }}
+              disabled={actionLoading}
+            >
+              Reject
+            </Button>
+          )}
           <Button onClick={() => {
             setSelectedRequest(null);
             setTokenValue('');
@@ -656,17 +645,19 @@ const TokenManagement = () => {
           }}>
             Cancel
           </Button>
-          <Button 
-            variant="contained"
-            onClick={handleIssueToken}
-            disabled={!tokenValue || !!tokenError || actionLoading}
-          >
-            {actionLoading ? <CircularProgress size={24} /> : 'Issue Token'}
-          </Button>
+          {selectedRequest?.status === 'approved' && (
+            <Button 
+              variant="contained"
+              onClick={handleIssueToken}
+              disabled={!tokenValue || !!tokenError || actionLoading}
+            >
+              {actionLoading ? <CircularProgress size={24} /> : 'Issue Token'}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
 
-      {/* Rejection Reason Dialog */}
+      {/* Rejection Dialog */}
       <Dialog
         open={rejectionDialogOpen}
         onClose={closeRejectionDialog}
@@ -703,6 +694,7 @@ const TokenManagement = () => {
         </DialogActions>
       </Dialog>
 
+      {/* Snackbar for notifications */}
       <Snackbar
         open={snackbar.open}
         autoHideDuration={6000}
