@@ -83,16 +83,29 @@ const TokenManagement = () => {
   const fetchTokenRequests = useCallback(async (page = 1) => {
     try {
       setLoading(true);
-      const response = await API.get(
-        `/tokens/admin/requests?status=pending,approved&page=${page}&limit=5`
-      );
-      
-      setRequests(response.data?.data || []);
-      setRequestsPagination(response.data?.pagination || {
+      const [requestsResponse, customersResponse] = await Promise.all([
+        API.get(`/tokens/admin/requests?status=pending,approved&page=${page}&limit=5`),
+        API.get('/admin/customers')
+      ]);
+
+      const allCustomers = customersResponse.data?.data || customersResponse.data || [];
+      const allRequests = requestsResponse.data?.data || requestsResponse.data || [];
+
+      // Match requests with customer verification data
+      const requestsWithVerification = allRequests.map(request => {
+        const customer = allCustomers.find(c => c.meterNumber === request.meterNumber);
+        return {
+          ...request,
+          customerVerification: customer?.verification || null
+        };
+      });
+
+      setRequests(requestsWithVerification);
+      setRequestsPagination({
         page,
         limit: 5,
-        total: 0,
-        totalPages: 1
+        total: requestsResponse.data?.total || 0,
+        totalPages: Math.ceil((requestsResponse.data?.total || 0) / 5)
       });
     } catch (error) {
       console.error('Fetch error:', error);
@@ -122,8 +135,8 @@ const TokenManagement = () => {
       setTokensPagination(response.data?.pagination || {
         page,
         limit: 5,
-        total: 0,
-        totalPages: 1
+        total: response.data?.total || 0,
+        totalPages: response.data?.totalPages || 1
       });
     } catch (error) {
       console.error('Failed to fetch tokens:', error);
@@ -261,12 +274,17 @@ const TokenManagement = () => {
       const response = await API.post('/tokens/admin/issue', {
         tokenValue,
         meterNumber: selectedRequest.meterNumber,
+        requestId: selectedRequest._id,
         vendorId: selectedRequest.vendorId._id,
         units: selectedRequest.units,
+        amount: selectedRequest.amount,
+        MSN: selectedRequest.customerVerification?.MSN
       });
 
       if (response.data.success) {
-        fetchTokenRequests(requestsPagination.page);
+        setRequests(prev => prev.map(req => 
+          req._id === selectedRequest._id ? { ...req, status: 'completed' } : req
+        ));
         fetchAllTokens(tokensPagination.page, selectedVendor, searchTerm);
         setSelectedRequest(null);
         setTokenValue('');
@@ -569,91 +587,99 @@ const TokenManagement = () => {
       </Box>
 
       {/* Token Issuance Dialog */}
-      <Dialog 
-        open={Boolean(selectedRequest)} 
-        onClose={() => setSelectedRequest(null)}
-        fullWidth
-        maxWidth="sm"
-      >
-        <DialogTitle>
-          {selectedRequest?.status === 'approved' ? 'Issue Token' : 'Token Details'}
-        </DialogTitle>
+      <Dialog open={Boolean(selectedRequest)} onClose={() => setSelectedRequest(null)} fullWidth maxWidth="sm">
+        <DialogTitle>Issue Token</DialogTitle>
         <DialogContent>
           {selectedRequest && (
             <Box sx={{ mt: 2 }}>
+              {/* Request ID */}
+              <TextField
+                label="Request ID"
+                value={selectedRequest._id}
+                fullWidth
+                margin="normal"
+                InputProps={{
+                  readOnly: true,
+                }}
+                variant="filled"
+              />
+
+              {/* Meter Number */}
               <TextField
                 label="Meter Number"
                 value={selectedRequest.meterNumber}
                 fullWidth
                 margin="normal"
-                disabled
+                InputProps={{
+                  readOnly: true,
+                }}
+                variant="filled"
               />
+
+              {/* Meter Serial Number (MSN) */}
               <TextField
                 label="Meter Serial Number (MSN)"
                 value={selectedRequest.customerVerification?.MSN || 'Not available'}
                 fullWidth
                 margin="normal"
-                disabled
+                InputProps={{
+                  readOnly: true,
+                }}
+                variant="filled"
               />
+
+              {/* Units */}
               <TextField
                 label="Units"
                 value={selectedRequest.units}
                 fullWidth
                 margin="normal"
-                disabled
+                InputProps={{
+                  readOnly: true,
+                }}
+                variant="filled"
               />
+
+              {/* Amount */}
               <TextField
                 label="Amount (₦)"
-                value={selectedRequest.amount}
+                value={selectedRequest.amount?.toLocaleString()}
                 fullWidth
                 margin="normal"
-                disabled
+                InputProps={{
+                  readOnly: true,
+                }}
+                variant="filled"
               />
-              {selectedRequest.status === 'approved' && (
-                <TextField
-                  label="Token Value *"
-                  value={tokenValue}
-                  onChange={(e) => setTokenValue(e.target.value)}
-                  fullWidth
-                  margin="normal"
-                  error={!!tokenError}
-                  helperText={tokenError}
-                  placeholder="Enter 16-45 digit token"
-                  inputProps={{ maxLength: 45 }}
-                />
-              )}
+
+              {/* Token Value */}
+              <TextField
+                label="Token Value *"
+                value={tokenValue}
+                onChange={(e) => setTokenValue(e.target.value)}
+                fullWidth
+                margin="normal"
+                error={!!tokenError}
+                helperText={tokenError || "Enter 16-45 digit token"}
+                inputProps={{ 
+                  maxLength: 45,
+                  inputMode: 'numeric',
+                  pattern: '[0-9]*' 
+                }}
+                required
+              />
             </Box>
           )}
         </DialogContent>
         <DialogActions>
-          {selectedRequest?.status === 'approved' && (
-            <Button 
-              color="error"
-              onClick={() => {
-                openRejectionDialog(selectedRequest._id);
-                setSelectedRequest(null);
-              }}
-              disabled={actionLoading}
-            >
-              Reject
-            </Button>
-          )}
-          <Button onClick={() => {
-            setSelectedRequest(null);
-            setTokenValue('');
-            setTokenError('');
-          }}>
-            Cancel
+          <Button onClick={() => setSelectedRequest(null)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleIssueToken}
+            disabled={!tokenValue || !!tokenError || actionLoading}
+          >
+            {actionLoading ? <CircularProgress size={24} /> : 'Issue Token'}
           </Button>
-          {selectedRequest?.status === 'approved' && (
-            <Button 
-              variant="contained"
-              onClick={handleIssueToken}
-              disabled={!tokenValue || !!tokenError || actionLoading}
-            >
-              {actionLoading ? <CircularProgress size={24} /> : 'Issue Token'}
-            </Button>
-          )}
         </DialogActions>
       </Dialog>
 
