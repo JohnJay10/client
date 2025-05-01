@@ -22,9 +22,13 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
-  Select
+  Select,
+  IconButton,
+  Tooltip
 } from '@mui/material';
 import API from '../../utils/api';
+import ReplayIcon from '@mui/icons-material/Replay';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 
 const TokenManagement = () => {
   // State for token requests
@@ -39,6 +43,17 @@ const TokenManagement = () => {
   });
   const [actionLoading, setActionLoading] = useState(false);
   const [tokenError, setTokenError] = useState('');
+
+  // State for reissue token
+  const [tokenToReissue, setTokenToReissue] = useState(null);
+  const [reissueTokenValue, setReissueTokenValue] = useState('');
+  const [reissueTokenError, setReissueTokenError] = useState('');
+
+  // State for token details modal
+  const [tokenDetails, setTokenDetails] = useState(null);
+  const [tokenDetailsOpen, setTokenDetailsOpen] = useState(false);
+
+  // Pagination for token requests
   const [requestsPagination, setRequestsPagination] = useState({
     page: 1,
     limit: 5,
@@ -49,12 +64,15 @@ const TokenManagement = () => {
   // State for tokens history
   const [tokens, setTokens] = useState([]);
   const [tokensLoading, setTokensLoading] = useState(false);
+  
+  // Pagination for token history
   const [tokensPagination, setTokensPagination] = useState({
     page: 1,
     limit: 5,
     total: 0,
     totalPages: 1
   });
+
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedVendor, setSelectedVendor] = useState('');
   const [vendors, setVendors] = useState([]);
@@ -78,6 +96,31 @@ const TokenManagement = () => {
       });
     }
   }, []);
+
+  // Fetch token details with verification info
+  const fetchTokenDetails = async (token) => {
+    try {
+      setActionLoading(true);
+      // Fetch customer verification details
+      const response = await API.get(`/tokens/admin/token/${token.meterNumber}`);
+      const verification = response.data?.data?.verification || {};
+      
+      setTokenDetails({
+        ...token,
+        verification   
+      });
+      setTokenDetailsOpen(true);
+    } catch (error) {
+      console.error('Error fetching token details:', error);
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.message || 'Failed to fetch token details',
+        severity: 'error'
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   // Fetch token requests with pagination
   const fetchTokenRequests = useCallback(async (page = 1) => {
@@ -132,11 +175,11 @@ const TokenManagement = () => {
       const tokensData = response.data?.data || [];
       
       setTokens(tokensData);
-      setTokensPagination(response.data?.pagination || {
+      setTokensPagination({
         page,
         limit: 5,
         total: response.data?.total || 0,
-        totalPages: response.data?.totalPages || 1
+        totalPages: Math.ceil((response.data?.total || 0) / 5)
       });
     } catch (error) {
       console.error('Failed to fetch tokens:', error);
@@ -178,11 +221,49 @@ const TokenManagement = () => {
       setTokenError('Token value is required');
       return false;
     }
-    if (!/^\d{16,45}$/.test(value)) {
-      setTokenError('Token must be 16-45 digits');
+  
+    // Remove all hyphens for digit count validation
+    const digitsOnly = value.replace(/-/g, '');
+  
+    // Check for invalid characters (only digits and hyphens allowed)
+    if (!/^[\d-]*$/.test(value)) {
+      setTokenError('Only numbers and hyphens are allowed');
       return false;
     }
+  
+    // Validate digit count (16-45)
+    if (digitsOnly.length < 16 || digitsOnly.length > 45) {
+      setTokenError(`Must have 16-45 digits (currently ${digitsOnly.length})`);
+      return false;
+    }
+  
     setTokenError('');
+    return true;
+  };
+
+  // Reissue token validation
+  const validateReissueToken = (value) => {
+    if (!value) {
+      setReissueTokenError('Token value is required');
+      return false;
+    }
+  
+    // Remove all hyphens for digit count validation
+    const digitsOnly = value.replace(/-/g, '');
+  
+    // Check for invalid characters (only digits and hyphens allowed)
+    if (!/^[\d-]*$/.test(value)) {
+      setReissueTokenError('Only numbers and hyphens are allowed');
+      return false;
+    }
+  
+    // Validate digit count (16-45)
+    if (digitsOnly.length < 16 || digitsOnly.length > 45) {
+      setReissueTokenError(`Must have 16-45 digits (currently ${digitsOnly.length})`);
+      return false;
+    }
+  
+    setReissueTokenError('');
     return true;
   };
 
@@ -306,6 +387,60 @@ const TokenManagement = () => {
     }
   };
 
+  // Reissue token
+  const handleReissueToken = async () => {
+    if (!validateReissueToken(reissueTokenValue)) {
+      setSnackbar({
+        open: true,
+        message: 'Please fix token validation errors',
+        severity: 'error'
+      });
+      return;
+    }
+  
+    if (!tokenToReissue) return;
+  
+    try {
+      setActionLoading(true);
+      
+      const response = await API.put( // Changed from PUT to POST
+        `/tokens/admin/reissue/${tokenToReissue._id}`, // Using _id instead of tokenId
+        {
+          tokenValue: reissueTokenValue,
+          meterNumber: tokenToReissue.meterNumber,
+          reason: 'Reissued by admin'
+        }
+      );
+  
+      if (response.data.success) {
+        setSnackbar({
+          open: true,
+          message: 'Token reissued successfully!',
+          severity: 'success'
+        });
+        await fetchAllTokens();
+        setTokenToReissue(null);
+        setReissueTokenValue('');
+      }
+    } catch (error) {
+      console.error('Reissue error:', error);
+      
+      let errorMessage = 'Failed to reissue token';
+      if (error.response) {
+        errorMessage = error.response.data.message || 
+                     error.response.data.error ||
+                     errorMessage;
+      }
+  
+      setSnackbar({
+        open: true,
+        message: errorMessage,
+        severity: 'error'
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
   // Format date
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
@@ -324,7 +459,11 @@ const TokenManagement = () => {
       pending: 'warning',
       approved: 'success',
       rejected: 'error',
-      completed: 'info'
+      completed: 'info',
+      issued: 'success',
+      used: 'default',
+      expired: 'error',
+      replaced: 'secondary'
     };
 
     return (
@@ -526,7 +665,7 @@ const TokenManagement = () => {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>Token ID</TableCell>
+                <TableCell>Token Value</TableCell>
                 <TableCell>Meter Number</TableCell>
                 <TableCell>Disco</TableCell>
                 <TableCell>Units</TableCell>
@@ -535,6 +674,7 @@ const TokenManagement = () => {
                 <TableCell>Request Date</TableCell>
                 <TableCell>Issue Date</TableCell>
                 <TableCell>Expiry Date</TableCell>
+                <TableCell>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -553,7 +693,7 @@ const TokenManagement = () => {
               ) : (
                 tokens.map(token => (
                   <TableRow key={token._id}>
-                    <TableCell>{token.tokenId || 'Pending'}</TableCell>
+                    <TableCell>{token.tokenValue || 'Pending'}</TableCell>   
                     <TableCell>{token.meterNumber}</TableCell>
                     <TableCell>{token.disco}</TableCell>
                     <TableCell>{token.units}</TableCell>
@@ -565,6 +705,33 @@ const TokenManagement = () => {
                     </TableCell>
                     <TableCell>
                       {token.expiryDate ? new Date(token.expiryDate).toLocaleDateString() : 'N/A'}
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Tooltip title="View Details">
+                          <IconButton 
+                            color="primary" 
+                            onClick={() => fetchTokenDetails(token)}
+                            disabled={actionLoading}
+                          >
+                            <VisibilityIcon />
+                          </IconButton>
+                        </Tooltip>
+                        {token.status === 'issued' && (
+                          <Tooltip title="Reissue Token">
+                            <IconButton 
+                              color="secondary" 
+                              onClick={() => {
+                                setTokenToReissue(token);
+                                setReissueTokenValue(token.tokenValue);
+                              }}
+                              disabled={actionLoading}
+                            >
+                              <ReplayIcon />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                      </Box>
                     </TableCell>
                   </TableRow>
                 ))
@@ -586,86 +753,160 @@ const TokenManagement = () => {
         )}
       </Box>
 
+      {/* Token Details Dialog */}
+      <Dialog open={tokenDetailsOpen} onClose={() => setTokenDetailsOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Token Details</DialogTitle>
+        <DialogContent>
+          {tokenDetails && (
+            <Box sx={{ mt: 2 }}>
+              <TextField
+                label="Meter Number"
+                value={tokenDetails.meterNumber}
+                fullWidth
+                margin="normal"
+                InputProps={{ readOnly: true }}
+                variant="filled"
+              />
+              
+              <TextField
+                label="Disco"
+                value={tokenDetails.disco}
+                fullWidth
+                margin="normal"
+                InputProps={{ readOnly: true }}
+                variant="filled"
+              />
+              
+              <TextField
+                label="Amount (₦)"
+                value={tokenDetails.amount?.toLocaleString() || '0'}
+                fullWidth
+                margin="normal"
+                InputProps={{ readOnly: true }}
+                variant="filled"
+              />
+              
+              <TextField
+                label="Token Value"
+                value={tokenDetails.tokenValue || 'N/A'}
+                fullWidth
+                margin="normal"
+                InputProps={{ readOnly: true }}
+                variant="filled"
+              />
+              
+              <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}>
+                Verification Details
+              </Typography>
+              
+              <TextField
+                label="MTK1"
+                value={tokenDetails.verification?.MTK1 || 'N/A'}
+                fullWidth
+                margin="normal"
+                InputProps={{ readOnly: true }}
+                variant="filled"
+              />
+              
+              <TextField
+                label="MTK2"
+                value={tokenDetails.verification?.MTK2 || 'N/A'}
+                fullWidth
+                margin="normal"
+                InputProps={{ readOnly: true }}
+                variant="filled"
+              />
+              
+              <TextField
+                label="RTK1"
+                value={tokenDetails.verification?.RTK1 || 'N/A'}
+                fullWidth
+                margin="normal"
+                InputProps={{ readOnly: true }}
+                variant="filled"
+              />
+              
+              <TextField
+                label="RTK2"
+                value={tokenDetails.verification?.RTK2 || 'N/A'}
+                fullWidth
+                margin="normal"
+                InputProps={{ readOnly: true }}
+                variant="filled"
+              />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setTokenDetailsOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Token Issuance Dialog */}
       <Dialog open={Boolean(selectedRequest)} onClose={() => setSelectedRequest(null)} fullWidth maxWidth="sm">
         <DialogTitle>Issue Token</DialogTitle>
         <DialogContent>
           {selectedRequest && (
             <Box sx={{ mt: 2 }}>
-              {/* Request ID */}
               <TextField
                 label="Request ID"
                 value={selectedRequest._id}
                 fullWidth
                 margin="normal"
-                InputProps={{
-                  readOnly: true,
-                }}
+                InputProps={{ readOnly: true }}
                 variant="filled"
               />
 
-              {/* Meter Number */}
               <TextField
                 label="Meter Number"
                 value={selectedRequest.meterNumber}
                 fullWidth
                 margin="normal"
-                InputProps={{
-                  readOnly: true,
-                }}
+                InputProps={{ readOnly: true }}
                 variant="filled"
               />
 
-              {/* Meter Serial Number (MSN) */}
               <TextField
                 label="Meter Serial Number (MSN)"
                 value={selectedRequest.customerVerification?.MSN || 'Not available'}
                 fullWidth
                 margin="normal"
-                InputProps={{
-                  readOnly: true,
-                }}
+                InputProps={{ readOnly: true }}
                 variant="filled"
               />
 
-              {/* Units */}
               <TextField
                 label="Units"
                 value={selectedRequest.units}
                 fullWidth
                 margin="normal"
-                InputProps={{
-                  readOnly: true,
-                }}
+                InputProps={{ readOnly: true }}
                 variant="filled"
               />
 
-              {/* Amount */}
               <TextField
                 label="Amount (₦)"
                 value={selectedRequest.amount?.toLocaleString()}
                 fullWidth
                 margin="normal"
-                InputProps={{
-                  readOnly: true,
-                }}
+                InputProps={{ readOnly: true }}
                 variant="filled"
               />
 
-              {/* Token Value */}
               <TextField
                 label="Token Value *"
                 value={tokenValue}
-                onChange={(e) => setTokenValue(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/[^\d-]/g, '');
+                  setTokenValue(val);
+                  validateToken(val);
+                }}
+                onBlur={() => validateToken(tokenValue)}
                 fullWidth
                 margin="normal"
                 error={!!tokenError}
-                helperText={tokenError || "Enter 16-45 digit token"}
-                inputProps={{ 
-                  maxLength: 45,
-                  inputMode: 'numeric',
-                  pattern: '[0-9]*' 
-                }}
+                helperText={tokenError || "Enter 16-45 digits (hyphens optional)"}
+                inputProps={{ maxLength: 45 + 10 }}
                 required
               />
             </Box>
@@ -679,6 +920,89 @@ const TokenManagement = () => {
             disabled={!tokenValue || !!tokenError || actionLoading}
           >
             {actionLoading ? <CircularProgress size={24} /> : 'Issue Token'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Reissue Token Dialog */}
+      <Dialog open={Boolean(tokenToReissue)} onClose={() => setTokenToReissue(null)} fullWidth maxWidth="sm">
+        <DialogTitle>Reissue Token</DialogTitle>
+        <DialogContent>
+          {tokenToReissue && (
+            <Box sx={{ mt: 2 }}>
+              <TextField
+                label="Original Token ID"
+                value={tokenToReissue.tokenId}
+                fullWidth
+                margin="normal"
+                InputProps={{ readOnly: true }}
+                variant="filled"
+              />
+
+              <TextField
+                label="Meter Number"
+                value={tokenToReissue.meterNumber}
+                fullWidth
+                margin="normal"
+                InputProps={{ readOnly: true }}
+                variant="filled"
+              />
+
+              <TextField
+                label="Disco"
+                value={tokenToReissue.disco}
+                fullWidth
+                margin="normal"
+                InputProps={{ readOnly: true }}
+                variant="filled"
+              />
+
+              <TextField
+                label="Units"
+                value={tokenToReissue.units}
+                fullWidth
+                margin="normal"
+                InputProps={{ readOnly: true }}
+                variant="filled"
+              />
+
+              <TextField
+                label="Amount (₦)"
+                value={tokenToReissue.amount?.toLocaleString()}
+                fullWidth
+                margin="normal"
+                InputProps={{ readOnly: true }}
+                variant="filled"
+              />
+
+              <TextField
+                label="New Token Value *"
+                value={reissueTokenValue}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/[^\d-]/g, '');
+                  setReissueTokenValue(val);
+                  validateReissueToken(val);
+                }}
+                onBlur={() => validateReissueToken(reissueTokenValue)}
+                fullWidth
+                margin="normal"
+                error={!!reissueTokenError}
+                helperText={reissueTokenError || "Enter 16-45 digits (hyphens optional)"}
+                inputProps={{ maxLength: 45 + 10 }}
+                required
+              />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setTokenToReissue(null)}>Cancel</Button>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={handleReissueToken}
+            disabled={!reissueTokenValue || !!reissueTokenError || actionLoading}
+          >
+            {actionLoading ? <CircularProgress size={24} /> : 'Reissue Token'}
           </Button>
         </DialogActions>
       </Dialog>
