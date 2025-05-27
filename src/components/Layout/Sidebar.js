@@ -67,6 +67,12 @@ const Sidebar = ({ mobileOpen, handleDrawerToggle, setActiveComponent }) => {
           </ListItemIcon>
           <ListItemText primary="Account Management" />
         </ListItem>
+        <ListItem button onClick={() => handleMenuItemClick('addVendorSpace')}>
+          <ListItemIcon>
+            <AccountBalanceIcon />
+          </ListItemIcon>
+          <ListItemText primary="Vendor Space" />
+        </ListItem>
       </List>
     </div>
   );
