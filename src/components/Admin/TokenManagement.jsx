@@ -661,84 +661,88 @@ const TokenManagement = () => {
         </Box>
           
         {/* Tokens Table */}
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Token Value</TableCell>
-                <TableCell>Meter Number</TableCell>
-                <TableCell>Disco</TableCell>
-                <TableCell>Units</TableCell>
-                <TableCell>Amount (₦)</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Request Date</TableCell>
-                <TableCell>Issue Date</TableCell>
-                <TableCell>Expiry Date</TableCell>
-                <TableCell>Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {tokensLoading ? (
-                <TableRow>
-                  <TableCell colSpan={10} align="center">
-                    <CircularProgress />
-                  </TableCell>
-                </TableRow>
-              ) : tokens.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={10} align="center">
-                    {searchTerm || selectedVendor ? 'No matching tokens found' : 'No tokens found'}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                tokens.map(token => (
-                  <TableRow key={token._id}>
-                    <TableCell>{token.tokenValue || 'Pending'}</TableCell>   
-                    <TableCell>{token.meterNumber}</TableCell>
-                    <TableCell>{token.disco}</TableCell>
-                    <TableCell>{token.units}</TableCell>
-                    <TableCell>₦{token.amount?.toLocaleString() || '0'}</TableCell>
-                    <TableCell>{renderStatusBadge(token.status)}</TableCell>
-                    <TableCell>{formatDate(token.createdAt)}</TableCell>
-                    <TableCell>
-                      {token.status === 'issued' ? formatDate(token.updatedAt) : 'N/A'}
-                    </TableCell>
-                    <TableCell>
-                      {token.expiryDate ? new Date(token.expiryDate).toLocaleDateString() : 'N/A'}
-                    </TableCell>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', gap: 1 }}>
-                        <Tooltip title="View Details">
-                          <IconButton 
-                            color="primary" 
-                            onClick={() => fetchTokenDetails(token)}
-                            disabled={actionLoading}
-                          >
-                            <VisibilityIcon />
-                          </IconButton>
-                        </Tooltip>
-                        {token.status === 'issued' && (
-                          <Tooltip title="Reissue Token">
-                            <IconButton 
-                              color="secondary" 
-                              onClick={() => {
-                                setTokenToReissue(token);
-                                setReissueTokenValue(token.tokenValue);
-                              }}
-                              disabled={actionLoading}
-                            >
-                              <ReplayIcon />
-                            </IconButton>
-                          </Tooltip>
-                        )}
-                      </Box>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
+       <TableContainer component={Paper}>
+  <Table>
+    <TableHead>
+      <TableRow>
+        <TableCell>Token Value</TableCell>
+        <TableCell>Meter Number</TableCell>
+        <TableCell>Disco</TableCell>
+        <TableCell>Units</TableCell>
+        <TableCell>Amount (₦)</TableCell>
+        <TableCell>Status</TableCell>
+        <TableCell>Request Date</TableCell>
+        <TableCell>Issue Date</TableCell>
+        <TableCell>Expiry Date</TableCell>
+        <TableCell>Actions</TableCell>
+      </TableRow>
+    </TableHead>
+    <TableBody>
+      {tokensLoading ? (
+        <TableRow>
+          <TableCell colSpan={10} align="center">
+            <CircularProgress />
+          </TableCell>
+        </TableRow>
+      ) : tokens.length === 0 ? (
+        <TableRow>
+          <TableCell colSpan={10} align="center">
+            {searchTerm || selectedVendor ? 'No matching tokens found' : 'No tokens found'}
+          </TableCell>
+        </TableRow>
+      ) : (
+        tokens.map(token => (
+          <TableRow key={token._id}>
+            <TableCell>{token.tokenValue || 'Pending'}</TableCell>
+            <TableCell>{token.meterNumber}</TableCell>
+            <TableCell>{token.disco}</TableCell>
+            <TableCell>{token.units}</TableCell>
+            <TableCell>₦{token.amount?.toLocaleString() || '0'}</TableCell>
+            <TableCell>{renderStatusBadge(token.status)}</TableCell>
+            {/* Updated: Use requestDate from TokenRequest */}
+            <TableCell>
+              {token.requestDate ? formatDate(token.requestDate) : 'N/A'}
+            </TableCell>
+            {/* Updated: Use issueDate from Token */}
+            <TableCell>
+              {token.issueDate ? formatDate(token.issueDate) : 'N/A'}
+            </TableCell>
+            <TableCell>
+              {token.expiryDate ? new Date(token.expiryDate).toLocaleDateString() : 'N/A'}
+            </TableCell>
+            <TableCell>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Tooltip title="View Details">
+                  <IconButton 
+                    color="primary" 
+                    onClick={() => fetchTokenDetails(token)}
+                    disabled={actionLoading}
+                  >
+                    <VisibilityIcon />
+                  </IconButton>
+                </Tooltip>
+                {token.status === 'issued' && (
+                  <Tooltip title="Reissue Token">
+                    <IconButton 
+                      color="secondary" 
+                      onClick={() => {
+                        setTokenToReissue(token);
+                        setReissueTokenValue(token.tokenValue);
+                      }}
+                      disabled={actionLoading}
+                    >
+                      <ReplayIcon />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </Box>
+            </TableCell>
+          </TableRow>
+        ))
+      )}
+    </TableBody>
+        </Table>
+      </TableContainer>
 
         {/* Tokens Pagination */}
         {tokensPagination.totalPages > 1 && (
