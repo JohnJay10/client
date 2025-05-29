@@ -56,7 +56,7 @@ const TokenManagement = () => {
   // Pagination for token requests
   const [requestsPagination, setRequestsPagination] = useState({
     page: 1,
-    limit: 5,
+    limit: 10,
     total: 0,
     totalPages: 1
   });
@@ -127,7 +127,7 @@ const TokenManagement = () => {
     try {
       setLoading(true);
       const [requestsResponse, customersResponse] = await Promise.all([
-        API.get(`/tokens/admin/requests?status=pending,approved&page=${page}&limit=5`),
+        API.get(`/tokens/admin/requests?status=pending,approved&page=${page}&limit=10`),
         API.get('/admin/customers')
       ]);
 
