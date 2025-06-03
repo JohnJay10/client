@@ -39,6 +39,8 @@ const VendorUpgradeManagement = () => {
   const [currentUpgrade, setCurrentUpgrade] = useState(null);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(5);
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+const [rejectingUpgrade, setRejectingUpgrade] = useState(null);
 
   const fetchPendingUpgrades = async () => {
     try {
@@ -64,6 +66,71 @@ const VendorUpgradeManagement = () => {
     setCurrentUpgrade(upgrade);
     setCompleteDialogOpen(true);
   };
+
+  const handleRejectUpgrade = (upgrade) => {
+  setRejectingUpgrade(upgrade);
+  setRejectDialogOpen(true);
+};
+
+const confirmRejectUpgrade = async () => {
+  try {
+    setProcessingId(rejectingUpgrade._id);
+    await API.patch(`/admin/reject/${rejectingUpgrade.vendorInfo.id}/${rejectingUpgrade._id}`);
+
+    setSnackbar({
+      open: true,
+      message: 'Upgrade request rejected successfully',
+    });
+
+    // Remove rejected upgrade from list
+    setPendingUpgrades(prev => prev.filter(u => u._id !== rejectingUpgrade._id));
+    setRejectDialogOpen(false);
+  } catch (error) {
+    console.error('Rejection error:', error);
+    setSnackbar({
+      open: true,
+      message: error.response?.data?.message || 'Failed to reject upgrade',
+    });
+  } finally {
+    setProcessingId(null);
+  }
+};
+
+<Dialog 
+  open={rejectDialogOpen} 
+  onClose={() => setRejectDialogOpen(false)}
+  maxWidth="sm"
+  fullWidth
+>
+  <DialogTitle>Confirm Rejection</DialogTitle>
+  <DialogContent>
+    <Box sx={{ mt: 2 }}>
+      <Typography variant="body1" gutterBottom>
+        Are you sure you want to reject this upgrade request?
+      </Typography>
+      <Typography variant="body2" color="text.secondary" gutterBottom>
+        <strong>Reference:</strong> {rejectingUpgrade?.reference || 'N/A'}
+      </Typography>
+    </Box>
+  </DialogContent>
+  <DialogActions>
+    <Button onClick={() => setRejectDialogOpen(false)}>Cancel</Button>
+    <Button 
+      onClick={confirmRejectUpgrade}
+      variant="contained"
+      color="error"
+      disabled={processingId === rejectingUpgrade?._id}
+    >
+      {processingId === rejectingUpgrade?._id ? (
+        <CircularProgress size={24} />
+      ) : (
+        'Reject Upgrade'
+      )}
+    </Button>
+  </DialogActions>
+</Dialog>
+
+
 
   const confirmCompleteUpgrade = async () => {
     try {
@@ -111,7 +178,7 @@ const VendorUpgradeManagement = () => {
   };
 
   return (
-    <Box sx={{ p: 3, bgcolor: '#f5f5f5', minHeight: '100vh' }}>
+    <Box sx={{ p: 9, bgcolor: '#f5f5f5', minHeight: '100vh' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
         <Typography variant="h5" component="h1">
           Pending Upgrade Requests
@@ -128,15 +195,17 @@ const VendorUpgradeManagement = () => {
       <Card elevation={3}>
         <TableContainer>
           <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Request Date</TableCell>
-                <TableCell>Additional Customers</TableCell>
-                <TableCell>Amount</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Actions</TableCell>
-              </TableRow>
-            </TableHead>
+           <TableHead>
+            <TableRow>
+              <TableCell>Vendor Name</TableCell> {/* NEW */}
+              <TableCell>Request Date</TableCell>
+              <TableCell>Additional Customers</TableCell>
+              <TableCell>Amount</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell>Actions</TableCell>
+            </TableRow>
+          </TableHead>
+
             <TableBody>
               {loading ? (
                 <TableRow>
@@ -155,7 +224,10 @@ const VendorUpgradeManagement = () => {
                   .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                   .map((upgrade) => (
                     <TableRow key={upgrade._id}>
-                      <TableCell>{formatDate(upgrade.date || upgrade.createdAt)}</TableCell>
+                       <TableCell>
+                        {upgrade.vendorInfo?.username || upgrade.vendorInfo?.businessName || 'Unknown'}
+                      </TableCell>
+                                          <TableCell>{formatDate(upgrade.date || upgrade.createdAt)}</TableCell>
                       <TableCell>{upgrade.additionalCustomers}</TableCell>
                       <TableCell>{formatCurrency(upgrade.amount)}</TableCell>
                       <TableCell>
@@ -180,6 +252,16 @@ const VendorUpgradeManagement = () => {
                           ) : (
                             'Mark as Paid'
                           )}
+                        </Button>
+
+
+                         <Button
+                          variant="outlined"
+                          color="error"
+                          onClick={() => handleRejectUpgrade(upgrade)}
+                          disabled={processingId === upgrade._id || upgrade.status !== 'pending'}
+                        >
+                          Reject
                         </Button>
                       </TableCell>
                     </TableRow>
