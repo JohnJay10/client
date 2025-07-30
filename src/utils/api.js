@@ -2,7 +2,8 @@
 import axios from 'axios';
 
 const API = axios.create({
-   baseURL: 'https://ctks.onrender.com/api', 
+  // baseURL:  'http://localhost:3000/api',  
+   baseURL: 'https://ctks.onrender.com/api',    
   headers: {
     'Content-Type': 'application/json',
   },     

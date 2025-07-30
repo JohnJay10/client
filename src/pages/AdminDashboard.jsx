@@ -46,7 +46,7 @@ import {
   Pie,
   Cell
 } from 'recharts';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx';  
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import Navbar from '../components/Layout/Navbar';

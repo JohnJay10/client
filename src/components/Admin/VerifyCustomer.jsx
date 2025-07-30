@@ -7,9 +7,9 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
+  TableContainer,
   TablePagination,
   IconButton,
   Dialog,
@@ -26,7 +26,10 @@ import {
   Divider,
   Grid,
   Switch,
-  FormControlLabel
+  FormControlLabel,
+  Menu,
+  MenuItem,
+  ListItemIcon
 } from '@mui/material';
 import {
   Edit,
@@ -36,10 +39,16 @@ import {
   VerifiedUser,
   HourglassEmpty,
   Search,
-  Block
+  Block,
+  PictureAsPdf,
+  GridOn,
+  MoreVert
 } from '@mui/icons-material';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
+import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import API from '../../utils/api';
 
 const CustomerVerification = () => {
@@ -50,6 +59,8 @@ const CustomerVerification = () => {
     message: '',
     severity: 'success'
   });
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [exportLoading, setExportLoading] = useState(false);
   const [verifyDialogOpen, setVerifyDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -208,7 +219,6 @@ const CustomerVerification = () => {
         { rejectionReason: values.reason }
       );
       
-      // More robust success check
       if (response.status >= 200 && response.status < 300) {
         setSnackbar({
           open: true,
@@ -216,7 +226,6 @@ const CustomerVerification = () => {
           severity: 'success'
         });
         
-        // Update local state immediately
         setCustomers(prevCustomers => 
           prevCustomers.map(customer => 
             customer._id === currentCustomer._id 
@@ -234,7 +243,7 @@ const CustomerVerification = () => {
         );
         
         setRejectDialogOpen(false);
-        setTabValue(2); // Switch to Rejected tab
+        setTabValue(2);
       } else {
         throw new Error(response.data.message || 'Rejection failed');
       }
@@ -251,6 +260,7 @@ const CustomerVerification = () => {
       setLoading(false);
     }
   };
+
   const updateCustomer = async (values) => {
     try {
       setLoading(true);
@@ -463,7 +473,6 @@ const CustomerVerification = () => {
   const filteredCustomers = useMemo(() => {
     let filtered = customers;
 
-    // Apply tab filter
     if (tabValue === 0) {
       filtered = filtered.filter(c => !c.verification?.isVerified && !c.verification?.rejected);
     } else if (tabValue === 1) {
@@ -472,7 +481,6 @@ const CustomerVerification = () => {
       filtered = filtered.filter(c => c.verification?.rejected);
     }
 
-    // Apply search filter
     if (searchTerm) {
       const searchTermLower = searchTerm.toLowerCase();
       filtered = filtered.filter(customer => 
@@ -482,7 +490,6 @@ const CustomerVerification = () => {
       );
     }
 
-    // Apply sorting
     const sortFields = {
       'createdAt': (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
       'verifiedAt': (a, b) => (a.verification?.verifiedAt ? new Date(a.verification.verifiedAt) : new Date(0)) - 
@@ -504,6 +511,217 @@ const CustomerVerification = () => {
       page * rowsPerPage + rowsPerPage
     );
   }, [filteredCustomers, page, rowsPerPage]);
+
+  const handleExportMenuClick = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleExportMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+const exportToPDF = (data, title) => {
+  setExportLoading(true);
+  
+  // Initialize jsPDF
+  const doc = new jsPDF({
+    orientation: 'landscape'
+  });
+  
+  // Add title
+  doc.setFontSize(18);
+  doc.text(`${title} - ${new Date().toLocaleDateString()}`, 14, 15);
+  
+  // Prepare data for the table
+  const tableData = data.map(customer => [
+    customer.meterNumber,
+    customer.disco,
+    formatDate(customer.createdAt),
+    customer.verification?.isVerified ? 'Verified' : 
+    customer.verification?.rejected ? 'Rejected' : 'Pending',
+    customer.lastToken || 'N/A',
+    customer.verification?.verifiedAt ? formatDate(customer.verification.verifiedAt) : 'N/A',
+    customer.verification?.rejectedAt ? formatDate(customer.verification.rejectedAt) : 'N/A',
+    customer.verification?.rejectionReason || 'N/A',
+    customer.verification?.KRN || 'N/A',
+    customer.verification?.SGC || 'N/A',
+    customer.verification?.TI || 'N/A',
+    customer.verification?.MSN || 'N/A',
+    customer.verification?.MTK1 || 'N/A',
+    customer.verification?.MTK2 || 'N/A',
+    customer.verification?.RTK1 || 'N/A',
+    customer.verification?.RTK2 || 'N/A'
+  ]);
+
+  // Add table using autoTable
+  autoTable(doc, {
+    startY: 25,
+    head: [
+      [
+        'Meter Number', 
+        'Disco', 
+        'Date Created', 
+        'Status', 
+        'Last Token',
+        'Verified Date',
+        'Rejected Date',
+        'Rejection Reason',
+        'KRN',
+        'SGC',
+        'TI',
+        'MSN',
+        'MTK1',
+        'MTK2',
+        'RTK1',
+        'RTK2'
+      ]
+    ],
+    body: tableData,
+    theme: 'grid',
+    headStyles: {
+      fillColor: [41, 128, 185],
+      textColor: 255,
+      fontStyle: 'bold'
+    },
+    alternateRowStyles: {
+      fillColor: [245, 245, 245]
+    },
+    margin: { top: 25 },
+    styles: {
+      fontSize: 7,
+      cellPadding: 2
+    },
+    columnStyles: {
+      0: { cellWidth: 'auto' },
+      1: { cellWidth: 'auto' },
+      2: { cellWidth: 'auto' },
+      3: { cellWidth: 'auto' },
+      4: { cellWidth: 'auto' },
+      5: { cellWidth: 'auto' },
+      6: { cellWidth: 'auto' },
+      7: { cellWidth: 'auto' },
+      8: { cellWidth: 'auto' },
+      9: { cellWidth: 'auto' },
+      10: { cellWidth: 'auto' },
+      11: { cellWidth: 'auto' },
+      12: { cellWidth: 'auto' },
+      13: { cellWidth: 'auto' },
+      14: { cellWidth: 'auto' },
+      15: { cellWidth: 'auto' }
+    }
+  });
+  
+  doc.save(`${title.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  setExportLoading(false);
+};
+
+  const exportToExcel = (data, title) => {
+    setExportLoading(true);
+    
+    const worksheet = XLSX.utils.json_to_sheet(
+      data.map(customer => ({
+        'Meter Number': customer.meterNumber,
+        'Disco': customer.disco,
+        'Date Created': formatDate(customer.createdAt),
+        'Status': customer.verification?.isVerified ? 'Verified' : 
+                 customer.verification?.rejected ? 'Rejected' : 'Pending',
+        'Last Token': customer.lastToken || 'N/A',
+        'Verified Date': customer.verification?.verifiedAt ? formatDate(customer.verification.verifiedAt) : 'N/A',
+        'Rejected Date': customer.verification?.rejectedAt ? formatDate(customer.verification.rejectedAt) : 'N/A',
+        'Rejection Reason': customer.verification?.rejectionReason || 'N/A',
+        'KRN': customer.verification?.KRN || 'N/A',
+        'SGC': customer.verification?.SGC || 'N/A',
+        'TI': customer.verification?.TI || 'N/A',
+        'MSN': customer.verification?.MSN || 'N/A',
+        'MTK1': customer.verification?.MTK1 || 'N/A',
+        'MTK2': customer.verification?.MTK2 || 'N/A',
+        'RTK1': customer.verification?.RTK1 || 'N/A',
+        'RTK2': customer.verification?.RTK2 || 'N/A',
+        'Customer ID': customer._id || 'N/A',
+        'Updated At': customer.updatedAt ? formatDate(customer.updatedAt) : 'N/A'
+      }))
+    );
+    
+    const wscols = [
+      {wch: 15}, {wch: 10}, {wch: 20}, {wch: 10}, 
+      {wch: 15}, {wch: 20}, {wch: 20}, {wch: 25},
+      {wch: 15}, {wch: 15}, {wch: 10}, {wch: 15},
+      {wch: 20}, {wch: 20}, {wch: 20}, {wch: 20},
+      {wch: 25}, {wch: 20}
+    ];
+    worksheet['!cols'] = wscols;
+    
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, title.slice(0, 31));
+    
+    XLSX.writeFile(
+      workbook, 
+      `${title.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.xlsx`
+    );
+    setExportLoading(false);
+  };
+
+  const handleExport = (type) => {
+    let dataToExport = [];
+    let title = '';
+    
+    switch(tabValue) {
+      case 0:
+        dataToExport = customers.filter(c => !c.verification?.isVerified && !c.verification?.rejected);
+        title = 'Pending_Verifications';
+        break;
+      case 1:
+        dataToExport = customers.filter(c => c.verification?.isVerified);
+        title = 'Verified_Customers';
+        break;
+      case 2:
+        dataToExport = customers.filter(c => c.verification?.rejected);
+        title = 'Rejected_Customers';
+        break;
+      default:
+        dataToExport = [];
+    }
+    
+    if (type === 'pdf') {
+      exportToPDF(dataToExport, title);
+    } else {
+      exportToExcel(dataToExport, title);
+    }
+    
+    handleExportMenuClose();
+  };
+
+  const exportMenu = (
+    <>
+      <Button 
+        variant="outlined" 
+        onClick={handleExportMenuClick}
+        startIcon={<MoreVert />}
+        disabled={loading || exportLoading}
+        sx={{ ml: 2 }}
+      >
+        Export
+      </Button>
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={handleExportMenuClose}
+      >
+        <MenuItem onClick={() => handleExport('pdf')} disabled={exportLoading}>
+          <ListItemIcon>
+            <PictureAsPdf fontSize="small" />
+          </ListItemIcon>
+          Export to PDF
+        </MenuItem>
+        <MenuItem onClick={() => handleExport('excel')} disabled={exportLoading}>
+          <ListItemIcon>
+            <GridOn fontSize="small" />
+          </ListItemIcon>
+          Export to Excel
+        </MenuItem>
+      </Menu>
+    </>
+  );
 
   return (
     <Box sx={{ p: 9, bgcolor: '#f5f5f5', minHeight: '100vh' }}>
@@ -531,6 +749,7 @@ const CustomerVerification = () => {
           >
             Refresh
           </Button>
+          {exportMenu}
         </Box>
       </Box>
 
@@ -646,7 +865,6 @@ const CustomerVerification = () => {
                     </TableCell>
                     <TableCell>
                       <Box sx={{ display: 'flex', gap: 1 }}>
-                        {/* Show Verify and Reject buttons only for pending verifications */}
                         {!customer.verification?.isVerified && !customer.verification?.rejected && (
                           <>
                             <IconButton 

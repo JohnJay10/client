@@ -13,11 +13,7 @@ import {
   Snackbar,
   Card,
   TextField,
-  Select,
-  MenuItem,
   InputAdornment,
-  FormControl,
-  InputLabel,
   IconButton,
   Dialog,
   DialogTitle,
@@ -34,9 +30,6 @@ import {
 import API from '../../utils/api';
 import { format } from 'date-fns';
 
-
-
-
 const DiscoPriceSetting = () => {
   const [prices, setPrices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -50,14 +43,12 @@ const DiscoPriceSetting = () => {
     pricePerUnit: ''
   });
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [currentPrice, setCurrentPrice] = useState(null);
+  const [currentPrice, setCurrentPrice] = useState({
+    _id: '',
+    discoName: '',
+    pricePerUnit: ''
+  });
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-
-  // Available DISCO options
-  const discoOptions = [
-    'IKEDC', 'EKEDC', 'IBEDC', 'KAEDCO', 'PHED', 'BEDC', 
-    'AEDC', 'JED', 'KEDCO', 'EEDC', 'YEDC', 'Others'
-  ];
 
   // Fetch all DISCO prices
   const fetchPrices = async () => {
@@ -89,17 +80,17 @@ const DiscoPriceSetting = () => {
   // Create new DISCO price
   const handleCreatePrice = async () => {
     try {
-      if (!newPrice.discoName || !newPrice.pricePerUnit || isNaN(Number(newPrice.pricePerUnit))) {
+      if (!newPrice.discoName.trim() || !newPrice.pricePerUnit || isNaN(Number(newPrice.pricePerUnit))) {
         setSnackbar({
           open: true,
-          message: 'Please select a DISCO and enter a valid price',
+          message: 'Please enter a valid DISCO name and price',
           severity: 'error'
         });
         return;
       }
 
       const response = await API.post('/admin/disco-pricing', {
-        discoName: newPrice.discoName,
+        discoName: newPrice.discoName.trim(),
         pricePerUnit: Number(newPrice.pricePerUnit)
       });
 
@@ -111,6 +102,7 @@ const DiscoPriceSetting = () => {
           message: `${newPrice.discoName} price created successfully`,
           severity: 'success'
         });
+        fetchPrices(); // Refresh the list
       }
     } catch (error) {
       console.error('Create error:', error);
@@ -122,32 +114,33 @@ const DiscoPriceSetting = () => {
     }
   };
 
-  // Update DISCO price
+  // Update DISCO price (name cannot be changed)
   const handleUpdatePrice = async () => {
     try {
-      if (!currentPrice || isNaN(Number(currentPrice.pricePerUnit))) {
+      const priceValue = Number(currentPrice.pricePerUnit);
+      
+      if (isNaN(priceValue) || priceValue < 0) {
         setSnackbar({
           open: true,
-          message: 'Please enter a valid price',
+          message: 'Please enter a valid positive price',
           severity: 'error'
         });
         return;
       }
 
-      const response = await API.patch(`/disco-pricing/${currentPrice._id}`, {
-        pricePerUnit: currentPrice.pricePerUnit
-      });
+      const response = await API.patch(
+        `/admin/disco-pricing/${encodeURIComponent(currentPrice.discoName)}`,
+        { pricePerUnit: priceValue }
+      );
 
       if (response.data.success) {
-        setPrices(prev => prev.map(price => 
-          price._id === currentPrice._id ? response.data.data : price
-        ));
-        setEditDialogOpen(false);
         setSnackbar({
           open: true,
           message: `${currentPrice.discoName} price updated successfully`,
           severity: 'success'
         });
+        setEditDialogOpen(false);
+        fetchPrices(); // Refresh the list
       }
     } catch (error) {
       console.error('Update error:', error);
@@ -160,28 +153,30 @@ const DiscoPriceSetting = () => {
   };
 
   // Delete DISCO price
-  const handleDeletePrice = async () => {
+ const handleDeletePrice = async () => {
     try {
-      const response = await API.delete(`/disco-pricing/${currentPrice._id}`);
-      
-      if (response.data.success) {
-        setPrices(prev => prev.filter(price => price._id !== currentPrice._id));
-        setDeleteDialogOpen(false);
-        setSnackbar({
-          open: true,
-          message: `${currentPrice.discoName} price deleted successfully`,
-          severity: 'success'
-        });
-      }
+        const response = await API.delete(
+            `/admin/disco-pricing/${encodeURIComponent(currentPrice.discoName)}`
+        );
+        
+        if (response.data.success) {
+            setSnackbar({
+                open: true,
+                message: `${currentPrice.discoName} deleted successfully`,
+                severity: 'success'
+            });
+            setDeleteDialogOpen(false);
+            fetchPrices(); // Refresh the list
+        }
     } catch (error) {
-      console.error('Delete error:', error);
-      setSnackbar({
-        open: true,
-        message: error.response?.data?.message || 'Failed to delete price',
-        severity: 'error'
-      });
+        console.error('Delete error:', error);
+        setSnackbar({
+            open: true,
+            message: error.response?.data?.message || 'Failed to delete DISCO',
+            severity: 'error'
+        });
     }
-  };
+};
 
   // Format currency (Naira)
   const formatCurrency = (amount) => {
@@ -220,25 +215,24 @@ const DiscoPriceSetting = () => {
         </Typography>
         
         <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-          <FormControl fullWidth>
-            <InputLabel>Electricity Provider</InputLabel>
-            <Select
-              value={newPrice.discoName}
-              onChange={(e) => setNewPrice({...newPrice, discoName: e.target.value})}
-              label="Electricity Provider"
-            >
-              {discoOptions.map(disco => (
-                <MenuItem key={disco} value={disco}>{disco}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <TextField
+            fullWidth
+            label="Electricity Provider Name"
+            value={newPrice.discoName}
+            onChange={(e) => setNewPrice({...newPrice, discoName: e.target.value})}
+          />
 
           <TextField
             fullWidth
             label="Price Per Unit (kWh)"
             value={newPrice.pricePerUnit}
-            onChange={(e) => setNewPrice({...newPrice, pricePerUnit: e.target.value})}
-            type="number"
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                setNewPrice({...newPrice, pricePerUnit: value});
+              }
+            }}
+            inputMode="decimal"
             InputProps={{
               startAdornment: <InputAdornment position="start">₦</InputAdornment>,
             }}
@@ -249,7 +243,7 @@ const DiscoPriceSetting = () => {
           variant="contained" 
           startIcon={<SaveIcon />}
           onClick={handleCreatePrice}
-          disabled={!newPrice.discoName || !newPrice.pricePerUnit}
+          disabled={!newPrice.discoName.trim() || !newPrice.pricePerUnit}
         >
           Save Price
         </Button>
@@ -302,7 +296,11 @@ const DiscoPriceSetting = () => {
                     <TableCell>
                       <IconButton 
                         onClick={() => {
-                          setCurrentPrice(price);
+                          setCurrentPrice({
+                            _id: price._id,
+                            discoName: price.discoName,
+                            pricePerUnit: price.pricePerUnit.toString()
+                          });
                           setEditDialogOpen(true);
                         }}
                       >
@@ -327,64 +325,69 @@ const DiscoPriceSetting = () => {
 
       {/* Edit Price Dialog */}
       <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)}>
-        <DialogTitle>Edit Price</DialogTitle>
+        <DialogTitle>Update Price for {currentPrice.discoName}</DialogTitle>
         <DialogContent>
-          {currentPrice && (
-            <Box sx={{ mt: 2, minWidth: 300 }}>
-              <Typography variant="subtitle1" gutterBottom>
-                {currentPrice.discoName}
-              </Typography>
-              <TextField
-                fullWidth
-                label="Price Per Unit (kWh)"
-                value={currentPrice.pricePerUnit}
-                onChange={(e) => setCurrentPrice({
-                  ...currentPrice,
-                  pricePerUnit: Number(e.target.value)
-                })}
-                type="number"
-                InputProps={{
-                  startAdornment: <InputAdornment position="start">₦</InputAdornment>,
-                }}
-                sx={{ mt: 2 }}
-              />
-            </Box>
-          )}
+          <Box sx={{ mt: 2, minWidth: 300 }}>
+            <Typography variant="subtitle1" sx={{ mb: 2, p: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
+              DISCO: {currentPrice.discoName}
+            </Typography>
+            <TextField
+              fullWidth
+              label="Price Per Unit (kWh)"
+              value={currentPrice.pricePerUnit}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                  setCurrentPrice({
+                    ...currentPrice,
+                    pricePerUnit: value
+                  });
+                }
+              }}
+              inputMode="decimal"
+              InputProps={{
+                startAdornment: <InputAdornment position="start">₦</InputAdornment>,
+              }}
+            />
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setEditDialogOpen(false)}>Cancel</Button>
           <Button 
             variant="contained" 
             onClick={handleUpdatePrice}
-            disabled={!currentPrice}
+            disabled={
+              !currentPrice.pricePerUnit ||
+              isNaN(Number(currentPrice.pricePerUnit)) ||
+              Number(currentPrice.pricePerUnit) < 0
+            }
           >
-            Update
+            Update Price
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
-        <DialogTitle>Confirm Delete</DialogTitle>
-        <DialogContent>
-          {currentPrice && (
-            <Typography>
-              Are you sure you want to delete the price for {currentPrice.discoName}?
-            </Typography>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-          <Button 
+    <DialogTitle>Confirm Delete</DialogTitle>
+    <DialogContent>
+        <Typography>
+            Are you sure you want to permanently delete {currentPrice.discoName}?
+            <br />
+            <strong>This action cannot be undone.</strong>
+        </Typography>
+    </DialogContent>
+    <DialogActions>
+        <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+        <Button 
             variant="contained" 
             color="error"
             onClick={handleDeletePrice}
-          >
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
-
+        >
+            Confirm Delete
+        </Button>
+    </DialogActions>
+</Dialog>
       <Snackbar
         open={snackbar.open}
         autoHideDuration={6000}
