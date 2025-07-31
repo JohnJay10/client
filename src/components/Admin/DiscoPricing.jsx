@@ -18,14 +18,17 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions
+  DialogActions,
+  Chip
 } from '@mui/material';
 import { 
   Power as PowerIcon,
   Refresh as RefreshIcon,
   Save as SaveIcon,
   Delete as DeleteIcon,
-  Edit as EditIcon
+  Edit as EditIcon,
+  ToggleOn as ToggleOnIcon,
+  ToggleOff as ToggleOffIcon
 } from '@mui/icons-material';
 import API from '../../utils/api';
 import { format } from 'date-fns';
@@ -33,6 +36,7 @@ import { format } from 'date-fns';
 const DiscoPriceSetting = () => {
   const [prices, setPrices] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: '',
@@ -46,9 +50,11 @@ const DiscoPriceSetting = () => {
   const [currentPrice, setCurrentPrice] = useState({
     _id: '',
     discoName: '',
-    pricePerUnit: ''
+    pricePerUnit: '',
+    disabled: false
   });
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [statusDialogOpen, setStatusDialogOpen] = useState(false);
 
   // Fetch all DISCO prices
   const fetchPrices = async () => {
@@ -57,7 +63,7 @@ const DiscoPriceSetting = () => {
       const response = await API.get('/admin/disco-pricing');
       
       if (response.data.success) {
-        setPrices(response.data.data);
+        setPrices(response.data.data || []);
       } else {
         throw new Error(response.data.message || 'Failed to fetch prices');
       }
@@ -91,18 +97,18 @@ const DiscoPriceSetting = () => {
 
       const response = await API.post('/admin/disco-pricing', {
         discoName: newPrice.discoName.trim(),
-        pricePerUnit: Number(newPrice.pricePerUnit)
+        pricePerUnit: Number(newPrice.pricePerUnit),
+        disabled: false
       });
 
       if (response.data.success) {
-        setPrices(prev => [...prev, response.data.data]);
         setNewPrice({ discoName: '', pricePerUnit: '' });
         setSnackbar({
           open: true,
           message: `${newPrice.discoName} price created successfully`,
           severity: 'success'
         });
-        fetchPrices(); // Refresh the list
+        fetchPrices();
       }
     } catch (error) {
       console.error('Create error:', error);
@@ -114,15 +120,15 @@ const DiscoPriceSetting = () => {
     }
   };
 
-  // Update DISCO price (name cannot be changed)
+  // Update DISCO price
   const handleUpdatePrice = async () => {
     try {
       const priceValue = Number(currentPrice.pricePerUnit);
       
-      if (isNaN(priceValue) || priceValue < 0) {
+      if (isNaN(priceValue)) {
         setSnackbar({
           open: true,
-          message: 'Please enter a valid positive price',
+          message: 'Please enter a valid price',
           severity: 'error'
         });
         return;
@@ -140,7 +146,7 @@ const DiscoPriceSetting = () => {
           severity: 'success'
         });
         setEditDialogOpen(false);
-        fetchPrices(); // Refresh the list
+        fetchPrices();
       }
     } catch (error) {
       console.error('Update error:', error);
@@ -153,30 +159,113 @@ const DiscoPriceSetting = () => {
   };
 
   // Delete DISCO price
- const handleDeletePrice = async () => {
+  const handleDeletePrice = async () => {
     try {
-        const response = await API.delete(
-            `/admin/disco-pricing/${encodeURIComponent(currentPrice.discoName)}`
-        );
-        
-        if (response.data.success) {
-            setSnackbar({
-                open: true,
-                message: `${currentPrice.discoName} deleted successfully`,
-                severity: 'success'
-            });
-            setDeleteDialogOpen(false);
-            fetchPrices(); // Refresh the list
-        }
-    } catch (error) {
-        console.error('Delete error:', error);
+      setActionLoading(true);
+      const response = await API.delete(
+        `/admin/disco-pricing/${encodeURIComponent(currentPrice.discoName)}`
+      );
+      
+      if (response.data.success) {
         setSnackbar({
-            open: true,
-            message: error.response?.data?.message || 'Failed to delete DISCO',
-            severity: 'error'
+          open: true,
+          message: `${currentPrice.discoName} deleted successfully`,
+          severity: 'success'
         });
+        setDeleteDialogOpen(false);
+        await fetchPrices();
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.message || 'Failed to delete DISCO',
+        severity: 'error'
+      });
+    } finally {
+      setActionLoading(false);
     }
+  };
+
+  // Enable DISCO
+const handleEnableDisco = async () => {
+  try {
+    setActionLoading(true);
+    const response = await API.patch(
+      `/admin/disco-pricing/${encodeURIComponent(currentPrice.discoName)}/enable`
+    );
+
+    if (response.data?.disabled === false) {
+      setPrices((prev) =>
+        prev.map((item) =>
+          item.discoName.toLowerCase() === currentPrice.discoName.toLowerCase()
+            ? { ...item, disabled: false }
+            : item
+        )
+      );
+
+      setSnackbar({
+        open: true,
+        message: response.data.message,
+        severity: 'success'
+      });
+      setStatusDialogOpen(false);
+    }
+  } catch (error) {
+    console.error('Enable error:', error);
+    setSnackbar({
+      open: true,
+      message: error.response?.data?.message || 'Failed to enable DISCO',
+      severity: 'error'
+    });
+  } finally {
+    setActionLoading(false);
+  }
 };
+
+
+
+
+
+const handleDisableDisco = async () => {
+  try {
+    setActionLoading(true);
+    const response = await API.patch(
+      `/admin/disco-pricing/${encodeURIComponent(currentPrice.discoName)}/disable`
+    );
+
+    if (response.data?.disabled === true) {
+      // Update the one item in the state
+      setPrices((prev) =>
+        prev.map((item) =>
+          item.discoName.toLowerCase() === currentPrice.discoName.toLowerCase()
+            ? { ...item, disabled: true }
+            : item
+        )
+      );
+
+      setSnackbar({
+        open: true,
+        message: response.data.message,
+        severity: 'success'
+      });
+      setStatusDialogOpen(false);
+    }
+  } catch (error) {
+    console.error('Disable error:', error);
+    setSnackbar({
+      open: true,
+      message: error.response?.data?.message || 'Failed to disable DISCO',
+      severity: 'error'
+    });
+  } finally {
+    setActionLoading(false);
+  }
+};
+
+
+
+
 
   // Format currency (Naira)
   const formatCurrency = (amount) => {
@@ -192,8 +281,10 @@ const DiscoPriceSetting = () => {
     return format(new Date(dateString), 'MMM dd, yyyy HH:mm');
   };
 
+
+
   return (
-    <Box sx={{ p: 9 }}>
+    <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
         <Typography variant="h5" component="h1">
           DISCO Pricing Management
@@ -261,6 +352,7 @@ const DiscoPriceSetting = () => {
               <TableRow>
                 <TableCell>Provider</TableCell>
                 <TableCell align="right">Price/kWh</TableCell>
+                <TableCell>Status</TableCell>
                 <TableCell>Last Updated</TableCell>
                 <TableCell>Actions</TableCell>
               </TableRow>
@@ -268,13 +360,13 @@ const DiscoPriceSetting = () => {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={4} align="center">
+                  <TableCell colSpan={5} align="center">
                     <CircularProgress />
                   </TableCell>
                 </TableRow>
               ) : prices.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} align="center">
+                  <TableCell colSpan={5} align="center">
                     No pricing data available
                   </TableCell>
                 </TableRow>
@@ -291,6 +383,14 @@ const DiscoPriceSetting = () => {
                       {formatCurrency(price.pricePerUnit)}
                     </TableCell>
                     <TableCell>
+                      <Chip
+                        label={price.disabled ? 'Disabled' : 'Active'}
+                        color={price.disabled ? 'error' : 'success'}
+
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>
                       {formatDate(price.updatedAt)}
                     </TableCell>
                     <TableCell>
@@ -299,12 +399,30 @@ const DiscoPriceSetting = () => {
                           setCurrentPrice({
                             _id: price._id,
                             discoName: price.discoName,
-                            pricePerUnit: price.pricePerUnit.toString()
+                            pricePerUnit: price.pricePerUnit.toString(),
+                            disabled: price.disabled
                           });
                           setEditDialogOpen(true);
                         }}
                       >
                         <EditIcon color="primary" />
+                      </IconButton>
+                      <IconButton
+                        onClick={() => {
+                          console.log('Toggling status for:', price.discoName);
+                          setCurrentPrice({
+                            _id: price._id,
+                            discoName: price.discoName,
+                            disabled: price.disabled
+                          });
+                          setStatusDialogOpen(true);
+                        }}
+                      >
+                        {price.disabled ? (
+                          <ToggleOffIcon color="error" />
+                        ) : (
+                          <ToggleOnIcon color="primary" />
+                        )}
                       </IconButton>
                       <IconButton 
                         onClick={() => {
@@ -358,8 +476,7 @@ const DiscoPriceSetting = () => {
             onClick={handleUpdatePrice}
             disabled={
               !currentPrice.pricePerUnit ||
-              isNaN(Number(currentPrice.pricePerUnit)) ||
-              Number(currentPrice.pricePerUnit) < 0
+              isNaN(Number(currentPrice.pricePerUnit))
             }
           >
             Update Price
@@ -367,27 +484,64 @@ const DiscoPriceSetting = () => {
         </DialogActions>
       </Dialog>
 
+      {/* Status Change Dialog */}
+      <Dialog open={statusDialogOpen} onClose={() => setStatusDialogOpen(false)}>
+        <DialogTitle>
+          {currentPrice.disabled ? 'Enable' : 'Disable'} {currentPrice.discoName}?
+        </DialogTitle>
+        <DialogContent>
+          <Typography>
+            {currentPrice.disabled
+              ? 'This will make the DISCO available for new customer registrations.'
+              : 'This will hide the DISCO from new customer registrations.'}
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 2, fontStyle: 'italic' }}>
+            Note: Existing customers will not be affected.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setStatusDialogOpen(false)}>Cancel</Button>
+          <Button 
+            variant="contained"
+            color={currentPrice.disabled ? 'success' : 'warning'}
+            onClick={currentPrice.disabled ? handleEnableDisco : handleDisableDisco}
+            disabled={actionLoading}
+          >
+            {actionLoading ? (
+              <CircularProgress size={24} color="inherit" />
+            ) : currentPrice.disabled ? (
+              'Enable'
+            ) : (
+              'Disable'
+            )}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
-    <DialogTitle>Confirm Delete</DialogTitle>
-    <DialogContent>
-        <Typography>
+        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogContent>
+          <Typography>
             Are you sure you want to permanently delete {currentPrice.discoName}?
-            <br />
-            <strong>This action cannot be undone.</strong>
-        </Typography>
-    </DialogContent>
-    <DialogActions>
-        <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-        <Button 
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 1, fontWeight: 'bold' }}>
+            This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+          <Button 
             variant="contained" 
             color="error"
             onClick={handleDeletePrice}
-        >
-            Confirm Delete
-        </Button>
-    </DialogActions>
-</Dialog>
+            disabled={actionLoading}
+          >
+            {actionLoading ? <CircularProgress size={24} /> : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Snackbar
         open={snackbar.open}
         autoHideDuration={6000}
