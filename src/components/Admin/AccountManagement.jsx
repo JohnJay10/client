@@ -177,9 +177,9 @@ const AccountManagement = () => {
                   <TableCell>{account.bankName}</TableCell>
                   <TableCell>{account.accountName}</TableCell>
                   <TableCell>
-                    <IconButton onClick={() => handleOpenDialog(account)}>
+                    {/* <IconButton onClick={() => handleOpenDialog(account)}>
                       <EditIcon color="primary" />
-                    </IconButton>
+                    </IconButton> */}
                     <IconButton onClick={() => handleDelete(account._id)}>
                       <DeleteIcon color="error" />
                     </IconButton>
