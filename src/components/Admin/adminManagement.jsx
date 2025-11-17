@@ -154,60 +154,61 @@ const AdminManagement = () => {
     handleMenuClose();
   };
 
-  const handleToggleStatus = async (admin) => {
-    try {
-      setProcessingId(admin._id);
-      const newStatus = !admin.active;
-      
-      await API.patch(`/admin/admins/${admin._id}/status`, {
-        active: newStatus
-      });
-      
-      setAdmins(prev => prev.map(a => 
-        a._id === admin._id ? { 
-          ...a, 
-          active: newStatus,
-          updatedAt: new Date().toISOString()
-        } : a
-      ));
-      
-      setSnackbar({
-        open: true,
-        message: `Admin ${newStatus ? 'activated' : 'deactivated'} successfully`,
-        severity: 'success'
-      });
-    } catch (error) {
-      console.error('Toggle status error:', error);
-      setSnackbar({
-        open: true,
-        message: error.response?.data?.message || 'Failed to update admin status',
-        severity: 'error'
-      });
-    } finally {
-      setProcessingId(null);
-    }
-  };
+const handleToggleStatus = async (admin) => {
+  try {
+    setProcessingId(admin._id);
+    const newStatus = !admin.active;
+    
+    await API.patch(`/admin/admins/${admin._id}/toggle-status`, {
+      active: newStatus
+    });
+    
+    setAdmins(prev => prev.map(a => 
+      a._id === admin._id ? { 
+        ...a, 
+        active: newStatus,
+        updatedAt: new Date().toISOString()
+      } : a
+    ));
+    
+    setSnackbar({
+      open: true,
+      message: `Admin ${newStatus ? 'activated' : 'deactivated'} successfully`,
+      severity: 'success'
+    });
+  } catch (error) {
+    console.error('Toggle status error:', error.response?.data || error.message);
+    setSnackbar({
+      open: true,
+      message: error.response?.data?.message || 'Failed to update admin status',
+      severity: 'error'
+    });
+  } finally {
+    setProcessingId(null);
+  }
+};
 
-  const confirmDeleteAdmin = async () => {
-    try {
-      await API.delete(`/admin/admins/${currentAdmin._id}`);
-      setSnackbar({
-        open: true,
-        message: 'Admin deleted successfully',
-        severity: 'success'
-      });
-      fetchAdmins();
-    } catch (error) {
-      setSnackbar({
-        open: true,
-        message: error.response?.data?.message || 'Failed to delete admin',
-        severity: 'error'
-      });
-    } finally {
-      setDeleteDialogOpen(false);
-      setCurrentAdmin(null);
-    }
-  };
+const confirmDeleteAdmin = async () => {
+  try {
+    await API.delete(`/admin/admins/${currentAdmin._id}/delete`);
+    setSnackbar({
+      open: true,
+      message: 'Admin deleted successfully',
+      severity: 'success'
+    });
+    fetchAdmins();
+  } catch (error) {
+    console.error('Delete error:', error.response?.data || error.message);
+    setSnackbar({
+      open: true,
+      message: error.response?.data?.message || 'Failed to delete admin',
+      severity: 'error'
+    });
+  } finally {
+    setDeleteDialogOpen(false);
+    setCurrentAdmin(null);
+  }
+};
 
   // Formik for Add Admin
   const addFormik = useFormik({
@@ -464,8 +465,8 @@ const AdminManagement = () => {
   };
 
   return (
-    <Box sx={{ p: 3, bgcolor: '#f5f5f5', minHeight: '100vh' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+    <Box sx={{ p: 9, bgcolor: '#f5f5f5', minHeight: '100vh' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 9 }}>
         <Typography variant="h4" component="h1" fontWeight="bold">
           Admin Management
         </Typography>
