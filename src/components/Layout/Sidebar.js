@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Drawer,
   List,
@@ -25,6 +25,7 @@ import {
   Close as CloseIcon,
   Brightness4 as DarkModeIcon,
   Brightness7 as LightModeIcon,
+  AdminPanelSettings as AdminIcon,
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 
@@ -57,6 +58,13 @@ const Sidebar = ({ activeComponent, setActiveComponent }) => {
     { name: 'tokenManagement', icon: <SendIcon />, label: 'Token Management' },
     { name: 'accountManagement', icon: <SettingsIcon />, label: 'Account Management' },
     { name: 'addVendorSpace', icon: <AddIcon />, label: 'Vendor Space' },
+    { name: 'adminManagement', icon: <AdminIcon />, label: 'Admin Management' },
+     { 
+    name: 'vendorCustomerManagement', 
+    icon: <PeopleIcon />, 
+    label: 'Vendor Customers',
+    permission: 'createVendors'
+  }, // Updated this line
   ];
 
   const handleMenuItemClick = (componentName) => {
@@ -145,7 +153,7 @@ const Sidebar = ({ activeComponent, setActiveComponent }) => {
           open={mobileOpen}
           onClose={handleDrawerToggle}
           ModalProps={{
-            keepMounted: true, // Better open performance on mobile.
+            keepMounted: true,
           }}
           sx={{
             display: { xs: 'block', md: 'none' },

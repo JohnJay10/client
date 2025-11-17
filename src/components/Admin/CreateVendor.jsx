@@ -4,7 +4,6 @@ import {
   TextField, 
   Button, 
   Typography, 
-  
   Table,
   TableBody,
   TableCell,
@@ -20,7 +19,8 @@ import {
   Chip,
   CircularProgress,
   Snackbar,
-  Card
+  Card,
+  Switch
 } from '@mui/material';
 import { 
   Edit, 
@@ -120,6 +120,41 @@ const VendorManagement = () => {
       setSnackbar({
         open: true,
         message: error.response?.data?.message || 'Failed to reject vendor',
+      });
+    } finally {
+      setApprovingId(null);
+    }
+  };
+
+  const handleToggleCustomerAddition = async (vendor) => {
+    try {
+      setApprovingId(vendor._id);
+      const newStatus = !vendor.canAddCustomers;
+      
+      await API.patch(`/admin/vendors/${vendor._id}/toggle-customer-addition`, {
+        canAddCustomers: newStatus
+      });
+      
+      setVendors(prev => prev.map(v => 
+        v._id === vendor._id ? { 
+          ...v, 
+          canAddCustomers: newStatus,
+          lastUpdatedBy: {
+            user: 'admin', // Replace with actual admin ID from your auth
+            at: new Date().toISOString()
+          }
+        } : v
+      ));
+      
+      setSnackbar({
+        open: true,
+        message: `Customer addition ${newStatus ? 'enabled' : 'disabled'} for ${vendor.username}`,
+      });
+    } catch (error) {
+      console.error('Toggle error:', error);
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.message || 'Failed to update vendor restriction',
       });
     } finally {
       setApprovingId(null);
@@ -267,19 +302,20 @@ const VendorManagement = () => {
                 <TableCell>Username</TableCell>
                 <TableCell>Email</TableCell>
                 <TableCell>Status</TableCell>
+                <TableCell>Customer Addition</TableCell>
                 <TableCell>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={4} align="center">
+                  <TableCell colSpan={5} align="center">
                     <CircularProgress />
                   </TableCell>
                 </TableRow>
               ) : vendors.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} align="center">
+                  <TableCell colSpan={5} align="center">
                     No vendors found
                   </TableCell>
                 </TableRow>
@@ -300,6 +336,19 @@ const VendorManagement = () => {
                         {vendor.approved && vendor.approvedAt && (
                           <Typography variant="caption" display="block" color="text.secondary">
                             {formatDate(vendor.approvedAt)}
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Switch
+                          checked={vendor.canAddCustomers !== false}
+                          onChange={() => handleToggleCustomerAddition(vendor)}
+                          color="primary"
+                          disabled={approvingId === vendor._id}
+                        />
+                        {vendor.canAddCustomers === false && (
+                          <Typography variant="caption" display="block" color="error">
+                            Restricted
                           </Typography>
                         )}
                       </TableCell>

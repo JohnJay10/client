@@ -31,17 +31,45 @@ const Login = () => {
     onSubmit: async (values, { setSubmitting }) => {
       try {
         setError('');
+        
+        // Clear any existing storage first
+        localStorage.removeItem('token');
+        localStorage.removeItem('role');
+        localStorage.removeItem('adminToken');
+        localStorage.removeItem('adminRole');
+        localStorage.removeItem('adminUser');
+        
+        console.log('🧹 Cleared localStorage');
+        
         const response = await API.post('/admin/login', values);
         
-        console.log('Login response:', response.data);
+        console.log('🔑 Login response:', response.data);
         
         if (response.data.token && response.data.role) {
+          // STORE BOTH SETS OF KEYS TO BE SAFE
           localStorage.setItem('token', response.data.token);
           localStorage.setItem('role', response.data.role);
+          localStorage.setItem('adminToken', response.data.token); // Duplicate for safety
+          localStorage.setItem('adminRole', response.data.role);   // Duplicate for safety
+          localStorage.setItem('adminUser', JSON.stringify({
+            _id: response.data._id,
+            username: response.data.username,
+            role: response.data.role,
+            permissions: response.data.permissions
+          }));
           
-          if (response.data.role === 'admin') {
+          console.log('💾 STORED IN localStorage:');
+          console.log('  - token:', localStorage.getItem('token'));
+          console.log('  - role:', localStorage.getItem('role'));
+          console.log('  - adminToken:', localStorage.getItem('adminToken'));
+          console.log('  - adminRole:', localStorage.getItem('adminRole'));
+          
+          // Allow both admin and super_admin
+          if (response.data.role === 'admin' || response.data.role === 'super_admin') {
+            console.log('✅ Navigation allowed for role:', response.data.role);
             navigate('/admin');
           } else {
+            console.log('❌ Invalid role:', response.data.role);
             setError('You do not have admin privileges');
           }
         } else {
@@ -49,7 +77,6 @@ const Login = () => {
         }
       } catch (err) {
         console.error('Login error:', err);
-        
         const errorMessage = err.response?.data?.message || 
                            err.response?.data?.error || 
                            err.message || 
@@ -169,7 +196,7 @@ const Login = () => {
               }}
               disabled={formik.isSubmitting}
             >
-              Sign In
+              {formik.isSubmitting ? 'Signing In...' : 'Sign In'}
             </Button>
           </Box>
         </Paper>

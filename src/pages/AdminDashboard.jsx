@@ -57,7 +57,9 @@ import DiscoPricing from '../components/Admin/DiscoPricing';
 import TokenManagement from '../components/Admin/TokenManagement';
 import RecentActivities from '../components/Admin/RecentActivities';
 import AccountManagement from '../components/Admin/AccountManagement';
-import AddVendorSpace from '../components/Admin/AddVendorSpace'
+import AddVendorSpace from '../components/Admin/AddVendorSpace';
+import AdminManagement from '../components/Admin/adminManagement';
+import VendorCustomerManagement from '../components/Admin/VendorCustomerManagement';
 import API from '../utils/api';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
@@ -556,6 +558,10 @@ const AdminDashboard = () => {
         return <AccountManagement />;
       case 'addVendorSpace':
         return <AddVendorSpace />;
+      case 'adminManagement':
+        return <AdminManagement />;
+      case 'vendorCustomerManagement':
+        return <VendorCustomerManagement />;
       default:
         return (
           <Box sx={{ p: 3, backgroundColor: theme.palette.background.paper }}>
