@@ -464,8 +464,8 @@ const AdminManagement = () => {
   };
 
   return (
-    <Box sx={{ p: 3, bgcolor: '#f5f5f5', minHeight: '100vh' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+    <Box sx={{ p: 9, bgcolor: '#f5f5f5', minHeight: '100vh' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 9 }}>
         <Typography variant="h4" component="h1" fontWeight="bold">
           Admin Management
         </Typography>
