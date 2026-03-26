@@ -3,7 +3,7 @@ import axios from 'axios';
 
 const API = axios.create({
   // baseURL: 'http://localhost:3000/api',  
-   baseURL: 'https://ctks.onrender.com/api', 
+    baseURL: 'https://ctks-rpxt.onrender.com/api',
   
   headers: {
     'Content-Type': 'application/json',
