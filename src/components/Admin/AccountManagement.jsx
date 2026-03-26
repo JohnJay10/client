@@ -20,7 +20,7 @@ import {
   CircularProgress,
   IconButton
 } from '@mui/material';
-import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import API from '../../utils/api';
 
 const AccountManagement = () => {
